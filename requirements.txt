@@ -7,3 +7,4 @@ requests
 beanie
 passlib
 jinja2
+bcrypt

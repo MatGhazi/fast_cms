@@ -38,7 +38,6 @@ def create_token(identifier: PydanticObjectId) -> str:
 
 def verify_token(token: str) -> str:
     randstr, identifier, signature = token[:32], token[32:56], token[56:]
-    identifier = str(identifier)
     calculated_signature = new(
         getenv('SECRET_KEY').encode(), 
         randstr.encode() + identifier.encode(), 
