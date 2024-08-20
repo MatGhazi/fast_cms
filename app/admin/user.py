@@ -1,12 +1,9 @@
-from os import getenv
-from typing import Literal
+from datetime import datetime
 
-from beanie.odm.operators.update.general import Set
-from fastapi import APIRouter, HTTPException, Depends, Query, Response
-from fastapi import status
+from fastapi import APIRouter, HTTPException, Depends, Query, Response, status
 
 from app.models import Response_Model
-from app.models.user import User
+from app.models.user import User, Deletion_Request
 from app.utils.user import get_admin_id
 from app.utils.pagination import paginate
 
@@ -99,3 +96,49 @@ async def active_or_deactive_a_user(
         data = {'success': False, 'message': str(e), 'data': None}
         response.status_code = status.HTTP_406_NOT_ACCEPTABLE
     return data
+
+
+@api.get('/deletion_request/', response_model=Response_Model)
+async def get_all_deletion_requests(
+    response: Response,
+    datetime: datetime = Query(None),
+    datetime_from: datetime = Query(None),
+    datetime_to: datetime = Query(None),
+    is_deleted: bool = Query(None),
+    reason: str = Query(None),
+    page: int = Query(1, description='page number'),
+    page_size: int = Query(10),
+    sort: str = Query('id'),
+    desc: bool = Query(False, description='sort descending'),
+):
+    """
+    """
+    try:
+        filters = {
+            'is_deleted': is_deleted,
+            'reason': reason,
+            'datetime': datetime,
+        }
+        if datetime_from or datetime_to:
+            filters.pop('datetime', None)
+            filters.update(
+                ge__datetime=datetime_from,
+                le__datetime=datetime_to,
+            )
+        #
+        page_data = await paginate(Deletion_Request, page, page_size, sort, desc, filters)
+        #
+        data = {
+            'success': True,
+            'message': '',
+            'data': page_data,
+        }
+        response.status_code = status.HTTP_200_OK
+    except HTTPException as e:
+        data = {'success': False, 'message': e.detail, 'data': None}
+        response.status_code = e.status_code
+    except Exception as e:
+        data = {'success': False, 'message': str(e), 'data': None}
+        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+    return data
+

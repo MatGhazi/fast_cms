@@ -2,9 +2,12 @@ fastapi
 uvicorn
 python-dotenv
 motor
-pydantic[email]
 requests
 beanie
 passlib
 jinja2
 bcrypt
+pillow
+fastapi-mail
+pytest
+pytest-asyncio

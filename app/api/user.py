@@ -1,14 +1,17 @@
 from datetime import datetime, UTC
-from os import getenv
 
 from bcrypt import hashpw, gensalt, checkpw
 from beanie.odm.operators.update.general import Set
-from fastapi import APIRouter, HTTPException, Depends, Response, Request
-from fastapi import status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends, File, Response, Request, status, UploadFile
 
 from app.models import Response_Model
-from app.models.user import User, Username, Join, Login, Profile, Avatar
-from app.utils.user import create_token, get_user_id
+from app.models.user import User, Deletion_Request
+from app.models.user import Username, Join, Login, Profile, Usemo, Password, Delete_Me
+from app.utils.image import upload as upload_image
+from app.utils.image import delete as delete_image
+from app.utils.user import create_token, get_user_id, send_otp, check_otp
+from app.texts import get_deletion_reasons
+import app.settings as settings
 
 
 api = APIRouter()
@@ -22,18 +25,10 @@ async def check_if_username_is_available(
     """
     """
     try:
-        user = await User.find_one(User.username == request.username)
-        if user:
-            availablity = False
-            message = 'Sorry! The username is taken.'
-        else:
-            availablity = True
-            message = 'The username is available.'
-        #
         data = {
             'success': True,
-            'message': message,
-            'data': {'availablity': availablity},
+            'message': 'The username is available.',
+            'data': None,
         }
         response.status_code = status.HTTP_200_OK
     except HTTPException as e:
@@ -55,7 +50,7 @@ async def join(
     """
     try:
         user_data = request.model_dump()
-        hashed_password = hashpw(user_data['password'].encode('utf-8'), gensalt())
+        hashed_password = hashpw(user_data['password'].encode('utf-8'), gensalt(rounds=settings.HASHING_COST))
         user_data['password'] = hashed_password.decode('utf-8')
         user_data['registration_datetime'] = datetime.now(UTC)
         user_data['is_user_active'] = True
@@ -66,16 +61,16 @@ async def join(
         # TODO: Verify email / mobile
         #
         token = create_token(user.id)
-        hashed_token = hashpw(token.encode('utf-8'), gensalt()).decode('utf-8')
+        hashed_token = hashpw(token.encode('utf-8'), gensalt(rounds=settings.HASHING_COST)).decode('utf-8')
         user.tokens.append(hashed_token)
         await user.save()
         #
+        response.status_code = status.HTTP_200_OK
         data = {
             'success': True,
             'message': 'You have been registered successfully.',
             'data': {'token': token},
         }
-        response.status_code = status.HTTP_200_OK
     except HTTPException as e:
         data = {'success': False, 'message': e.detail, 'data': None}
         response.status_code = e.status_code
@@ -92,33 +87,43 @@ async def login(
 ):
     """
     """
-    #
-    # TODO: Check if the user has already been signed in 
-    #
     try:
-        user = await User.find_one(User.username == request.usemo)
-        if not user:
-            user = await User.find_one(User.email == request.usemo)
-        if not user:
-            user = await User.find_one(User.mobile == request.usemo)
+        if request.usemo.startswith('+'):
+            field = 'mobile'
+        elif '@' in request.usemo:
+            field = 'email'
+        else:
+            field = 'username'
+        #
+        user = await User.find_one({field: request.usemo})
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect credentials')
         if not checkpw(request.password.encode('utf-8'), user.password.encode('utf-8')):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect credentials')
         #
         token = create_token(user.id)
-        hashed_token = hashpw(token.encode('utf-8'), gensalt()).decode('utf-8')
+        hashed_token = hashpw(token.encode('utf-8'), gensalt(rounds=settings.HASHING_COST)).decode('utf-8')
         tokens = user.tokens
         tokens.append(hashed_token)
-        if len(tokens) > int(getenv('MAX_SESSION_COUNT')):
+        if len(tokens) > settings.MAX_SESSION_COUNT:
             tokens.pop(0)
         user.tokens = tokens
         await user.save()
         #
+        deletion_request = await Deletion_Request.find_one({'uid':str(user.id)})
+        if deletion_request:
+            await deletion_request.delete()
+            deletion_canceled = True
+        else:
+            deletion_canceled = False
+        #
         data = {
             'success': True,
             'message': 'You are logged in successfully.',
-            'data': {'token': token},
+            'data': {
+                'token': token,
+                'deletion_canceled': deletion_canceled,
+            },
         }
         response.status_code = status.HTTP_200_OK
     except HTTPException as e:
@@ -134,7 +139,7 @@ async def login(
 async def logout(
     response: Response,
     request: Request,
-    uid: dict = Depends(get_user_id),
+    uid: str = Depends(get_user_id),
 ):
     """
     """
@@ -217,18 +222,61 @@ async def update_profile(
 @api.put('/avatar/', response_model=Response_Model)
 async def update_avatar(
     response: Response,
-    request: Avatar,
+    uid: str = Depends(get_user_id),
+    file: UploadFile = File(...),
+):
+    """
+    """
+    try:
+        user = await User.get(uid)
+        if user.avatar:
+            await delete_image(user.avatar, uid)
+        #
+        image_id = await upload_image(
+            uid=uid, 
+            model='User', 
+            object_id=uid, 
+            field='avatar', 
+            file=file,
+            settings=settings.AVATAR,
+        )
+        user.avatar = image_id
+        await user.save()
+        #
+        data = {
+            'success': True,
+            'message': 'Your avatar has been updated.',
+            'data': {'image_id': image_id},
+        }
+        response.status_code = status.HTTP_200_OK
+    except HTTPException as e:
+        data = {'success': False, 'message': e.detail, 'data': None}
+        response.status_code = e.status_code
+    except Exception as e:
+        data = {'success': False, 'message': str(e), 'data': None}
+        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+    return data
+
+
+@api.delete('/avatar/', response_model=Response_Model)
+async def delete_avatar(
+    response: Response,
     uid: str = Depends(get_user_id),
 ):
     """
     """
     try:
         user = await User.get(uid)
-        user.avatar = request.avatar
+        if not user.avatar:
+            raise Exception('You do NOT have any avatar to delete!')
+        # 
+        await delete_image(user.avatar, uid)
+        user.avatar = None
         await user.save()
+        #
         data = {
             'success': True,
-            'message': 'Your avatar has been updated.',
+            'message': 'Your avatar has been deleted.',
             'data': None,
         }
         response.status_code = status.HTTP_200_OK
@@ -242,8 +290,135 @@ async def update_avatar(
 
 
 @api.patch('/otp/', response_model=Response_Model)
-async def request_for_an_otp():...
+async def request_for_an_otp(
+    request: Usemo,
+    response: Response,
+    background_tasks: BackgroundTasks
+):
+    """
+    """
+    try:
+        if request.usemo.startswith('+'):
+            field = 'mobile'
+        elif '@' in request.usemo:
+            field = 'email'
+        else:
+            field = 'username'
+        #
+        user = await User.find_one({field: request.usemo})
+        if not user:
+            raise Exception('User not found!')
+        #
+        await send_otp(user, background_tasks)
+        #
+        data = {
+            'success': True,
+            'message': 'An OTP was sent!',
+            'data': None
+        }
+        response.status_code = status.HTTP_200_OK
+    except Exception as e:
+        data = {'success': False, 'message': str(e), 'data': None}
+        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+    return data
 
 
 @api.put('/password/', response_model=Response_Model)
-async def reset_password():...
+async def reset_password(
+    request: Password, 
+    response: Response,
+):
+    """
+    """
+    try:
+        if request.usemo.startswith('+'):
+            field = 'mobile'
+        elif '@' in request.usemo:
+            field = 'email'
+        else:
+            field = 'username'
+        #
+        user = await User.find_one({field: request.usemo})
+        if not user:
+            raise Exception('User not found!')
+        #
+        check_otp(user, request.otp)
+        #
+        user.password = hashpw(request.password.encode('utf-8'), gensalt(rounds=settings.HASHING_COST)).decode('utf-8')
+        user.otp = None
+        user.otp_datetime = None
+        await user.save()
+        #
+        response.status_code = status.HTTP_200_OK
+        data = {
+            'success': True,
+            'message': 'Password has been updated.',
+            'data': None,
+        }
+    except Exception as e:
+        data = {'success': False, 'message': str(e), 'data': None}
+        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+    return data
+
+
+@api.get('/reasons/', response_model=Response_Model)
+async def get_delete_account_reasons(
+    response: Response,
+    uid: str = Depends(get_user_id),
+):
+    """
+    """
+    try:
+        #
+        response.status_code = status.HTTP_200_OK
+        data = {
+            'success': True,
+            'message': '',
+            'data': get_deletion_reasons(),
+        }
+    except HTTPException as e:
+        data = {'success': False, 'message': e.detail, 'data': None}
+        response.status_code = e.status_code
+    except Exception as e:
+        data = {'success': False, 'message': str(e), 'data': None}
+        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+    return data
+
+
+@api.post('/deleteme/', response_model=Response_Model)
+async def delete_me(
+    response: Response,
+    request: Delete_Me,
+    uid: str = Depends(get_user_id),
+):
+    """
+    Right to be forgotten
+
+    A predefined reason or custom reason that starts with the character "+"
+    """
+    try:
+        await Deletion_Request(
+            uid=uid,
+            datetime=datetime.now(UTC),
+            is_deleted=False,
+            reason=request.reason,
+        ).create()
+        #
+        user = await User.get(uid)
+        user.tokens = []
+        await user.save()
+        # 
+        response.status_code = status.HTTP_200_OK
+        data = {
+            'success': True,
+            'message': f'Your deletion request has been submitted. Your account will be deleted within {settings.DELETION_BREAK_IN_DAYS} days.',
+            'data': None,
+        }
+    except HTTPException as e:
+        data = {'success': False, 'message': e.detail, 'data': None}
+        response.status_code = e.status_code
+    except Exception as e:
+        data = {'success': False, 'message': str(e), 'data': None}
+        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+    return data
+
