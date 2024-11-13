@@ -3,7 +3,8 @@ from hmac import compare_digest, new
 from random import choices
 from string import digits
 from secrets import token_hex
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta
+from pytz import UTC
 
 from bcrypt import hashpw, gensalt, checkpw
 from fastapi import BackgroundTasks, Header, HTTPException, status
@@ -78,6 +79,7 @@ async def get_user(authorization: str) -> User:
 
 
 async def get_user_id(authorization: str = Header(None)) -> str:
+    print('######   ', authorization)
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

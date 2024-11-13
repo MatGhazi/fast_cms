@@ -1,0 +1,4 @@
+myenv
+*.pyc
+.DS_Store
+env/

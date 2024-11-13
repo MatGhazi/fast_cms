@@ -1,4 +1,5 @@
-from datetime import datetime, UTC
+from datetime import datetime
+from pytz import UTC
 from contextlib import asynccontextmanager
 from os import getenv
 
@@ -10,7 +11,7 @@ from starlette.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 
-match getenv('env'):
+match getenv('env', 'development'):
     case 'development': load_dotenv('env/.env.dev')
     case 'test': load_dotenv('env/.env.test')
     case 'production': load_dotenv('env/.env.prod')
@@ -24,7 +25,8 @@ from app.models import Response_Model
 from app.utils.changelog import get_version, get_change_log
 
 from app.api.user import api as user
-from app.api.media import api as media
+from app.api.fc import api as fc
+# from app.api.media import api as media
 
 from app.admin.user import api as admin_user
 from app.admin.media import api as admin_media
@@ -53,11 +55,13 @@ app.add_middleware(
 
 
 app.include_router(user, tags=['Users'], prefix='/user')
-app.include_router(media, tags=['Media'], prefix='/media')
+app.include_router(fc, tags=['Fc'], prefix='/fc')
+# app.include_router(media, tags=['Media'], prefix='/media')
 
 app.include_router(admin_user, tags=['Admin - Users'], prefix='/admin/user')
 app.include_router(admin_media, tags=['Admin - Media'], prefix='/admin/media')
 
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.get('/time/', response_model=Response_Model, tags=['Time'])
 async def server_time(response: Response):

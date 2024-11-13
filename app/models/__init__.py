@@ -1,8 +1,8 @@
 from pydantic import BaseModel
-from typing import Any
-
+from typing import Any, Optional
 
 class Response_Model(BaseModel):
     success: bool
     message: str
-    data: Any
+    data: Optional[Any] = None
+    # data: Any

@@ -7,14 +7,14 @@ from app.models.user import User, Deletion_Request
 from app.models.media import Image, Video
 from app.models.content import Content, Comment, Reaction, Tag
 from app.models.page import Page
-
+from app.models.fc import Flashcard  
 
 fs = None
 MODELS = []
 MODELS += [User, Deletion_Request]
 MODELS += [Image, Video]
 MODELS += [Content, Comment, Reaction, Tag]
-MODELS += [Page]
+MODELS += [Page, Flashcard]
 
 
 # Initialize the database

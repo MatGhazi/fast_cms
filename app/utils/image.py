@@ -1,4 +1,6 @@
-from datetime import datetime, UTC
+from datetime import datetime
+from pytz import UTC
+
 from io import BytesIO
 from bson import ObjectId
 

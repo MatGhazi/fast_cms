@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta
+from pytz import UTC
 
 
 def test_username(test, client):

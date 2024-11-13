@@ -1,4 +1,5 @@
-from datetime import datetime, UTC
+from datetime import datetime
+from pytz import UTC
 
 from bcrypt import hashpw, gensalt, checkpw
 from beanie.odm.operators.update.general import Set
@@ -12,9 +13,12 @@ from app.utils.image import delete as delete_image
 from app.utils.user import create_token, get_user_id, send_otp, check_otp
 from app.texts import get_deletion_reasons
 import app.settings as settings
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 
 
 api = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
 
 
 @api.post('/available/', response_model=Response_Model)
@@ -79,6 +83,22 @@ async def join(
         response.status_code = status.HTTP_406_NOT_ACCEPTABLE
     return data
 
+@api.get("/signin/", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("sign_in.html", {"request": request})
+
+@api.get("/signup/", response_class=HTMLResponse)
+async def signup_page(request: Request):
+    return templates.TemplateResponse("sign_up.html", {"request": request})
+
+@api.get("/reset-password/", response_class=HTMLResponse)
+async def reset_password_page(request: Request):
+    return templates.TemplateResponse("reset_password.html", {"request": request})
+
+@api.get("/flashcards/")
+async def flashcard_endpoint():
+    return {"message": "Successful"}
+   
 
 @api.post('/login/', response_model=Response_Model)
 async def login(
@@ -219,43 +239,43 @@ async def update_profile(
     return data
 
 
-@api.put('/avatar/', response_model=Response_Model)
-async def update_avatar(
-    response: Response,
-    uid: str = Depends(get_user_id),
-    file: UploadFile = File(...),
-):
-    """
-    """
-    try:
-        user = await User.get(uid)
-        if user.avatar:
-            await delete_image(user.avatar, uid)
-        #
-        image_id = await upload_image(
-            uid=uid, 
-            model='User', 
-            object_id=uid, 
-            field='avatar', 
-            file=file,
-            settings=settings.AVATAR,
-        )
-        user.avatar = image_id
-        await user.save()
-        #
-        data = {
-            'success': True,
-            'message': 'Your avatar has been updated.',
-            'data': {'image_id': image_id},
-        }
-        response.status_code = status.HTTP_200_OK
-    except HTTPException as e:
-        data = {'success': False, 'message': e.detail, 'data': None}
-        response.status_code = e.status_code
-    except Exception as e:
-        data = {'success': False, 'message': str(e), 'data': None}
-        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
-    return data
+# @api.put('/avatar/', response_model=Response_Model)
+# async def update_avatar(
+#     response: Response,
+#     uid: str = Depends(get_user_id),
+#     file: UploadFile = File(...),
+# ):
+#     """
+#     """
+#     try:
+#         user = await User.get(uid)
+#         if user.avatar:
+#             await delete_image(user.avatar, uid)
+#         #
+#         image_id = await upload_image(
+#             uid=uid, 
+#             model='User', 
+#             object_id=uid, 
+#             field='avatar', 
+#             file=file,
+#             settings=settings.AVATAR,
+#         )
+#         user.avatar = image_id
+#         await user.save()
+#         #
+#         data = {
+#             'success': True,
+#             'message': 'Your avatar has been updated.',
+#             'data': {'image_id': image_id},
+#         }
+#         response.status_code = status.HTTP_200_OK
+#     except HTTPException as e:
+#         data = {'success': False, 'message': e.detail, 'data': None}
+#         response.status_code = e.status_code
+#     except Exception as e:
+#         data = {'success': False, 'message': str(e), 'data': None}
+#         response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+#     return data
 
 
 @api.delete('/avatar/', response_model=Response_Model)

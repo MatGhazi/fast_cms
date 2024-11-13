@@ -1,5 +1,7 @@
 import pytest
-from datetime import datetime, UTC
+from datetime import datetime
+from pytz import UTC
+
 from dotenv import load_dotenv
 from os import getenv, path
 
