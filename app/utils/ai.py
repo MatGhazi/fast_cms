@@ -1,10 +1,13 @@
 
 import os
 from dotenv import load_dotenv
-load_dotenv('../../env/.env.api')
+env_path = os.path.join(os.path.dirname(__file__), '..', '..', 'env', '.env.api')
+print(f"Loading .env file from: {env_path}")
+load_dotenv(env_path)
+# load_dotenv('env/.env.api')
 from openai import OpenAI
-# import markdown
-
+# /mnt/d/Projects/fast_cms/app/utils/../env/.env.api
+# /mnt/d/Projects/fast_cms/env/.env.api
 client = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),
 )
