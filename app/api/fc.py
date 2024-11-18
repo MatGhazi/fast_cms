@@ -208,10 +208,15 @@ async def edit_flashcard(
     edited_question: str = Form(...),
     edited_answer: str = Form(...),
     uid: str = Depends(get_user_id)
-):
+    ):
+    # print(11)
     try:
+        user = await User.get(uid)
+        username = user.username
+        print(flashcard_id)
         flashcard = await Flashcard.get(flashcard_id)
-        if flashcard.user_id != uid:
+        print(flashcard)
+        if flashcard.user_id != username:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to access this flashcard"
@@ -230,7 +235,7 @@ async def edit_flashcard(
             "data": flashcard
         }
         response.status_code = status.HTTP_200_OK
-        return RedirectResponse(url=f"/flashcards/", status_code=303) # Temprory
+        # return RedirectResponse(url=f"/flashcards/", status_code=303) # Temprory
     except HTTPException as e:
         data = {'success': False, 'message': e.detail, 'data': None}
         response.status_code = e.status_code
@@ -246,8 +251,12 @@ async def delete_flashcard(
     uid: str = Depends(get_user_id)
 ):
     try:
+        user = await User.get(uid)
+        username = user.username
+        print(flashcard_id)
         flashcard = await Flashcard.get(flashcard_id)
-        if flashcard.user_id != uid:
+        print(flashcard)
+        if flashcard.user_id != username:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to access this flashcard"
@@ -261,7 +270,7 @@ async def delete_flashcard(
             "data": None
         }
         response.status_code = status.HTTP_200_OK
-        return RedirectResponse(url=f"/flashcards/", status_code=303)
+        # return RedirectResponse(url=f"/flashcards/", status_code=303)
     except HTTPException as e:
         data = {'success': False, 'message': e.detail, 'data': None}
         response.status_code = e.status_code

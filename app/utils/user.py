@@ -87,6 +87,7 @@ async def get_user_id(authorization: str = Header(None)) -> str:
         )
     try:
         user = await get_user(authorization)
+        # print(22222)
         return str(user.id)
     except Exception as e:
         raise HTTPException(
